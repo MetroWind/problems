@@ -1,0 +1,177 @@
+= Poor man’s DP
+
+The general procedure is rather simple. We test every char in `s` for
+the first char of `t`. If we find a match at the __i__th char in `s`,
+the problem becomes calculating the number of subsequences in `s’`
+against `t’`, where `s’` is the substring of s after __i__th char, and
+`t’` is `t` except the 1st char.
+
+A naive recursive function then can be written as
+
+[source,c++]
+----
+int calcNum(const string& s, const string& t, unsigned int s_begin, unsigned int t_begin)
+{
+    // cout << "Trying " << s_begin << ' ' << t_begin << ", "
+    //      << s.substr(s_begin) << " vs " << t.substr(t_begin) << endl;
+    if(t_begin >= t.size())
+    {
+        // cout << "t exhausted." << endl;
+        return 1;
+    }
+
+    if(s_begin >= s.size())
+    {
+        // cout << "s exhausted." << endl;
+        return 0;
+    }
+
+    unsigned int Num = 0;
+    for(unsigned int is = s_begin; is < s.size(); is++)
+    {
+        if(s[is] == t[t_begin])
+        {
+            // cout << "Found "  << s[is] << " at " << is << ' ' << t_begin << endl;
+            auto BranchNum = calcNum(s, t, is+1, t_begin+1);
+            // cout << s[is] << " at " << is << ' ' << t_begin << " gives "
+            //      << BranchNum << endl;
+            Num += BranchNum;
+        }
+    }
+    return Num;
+}
+----
+
+Note that I have a bunch of commented debug output. This function
+works, but is too slow to be a valid solution. The reason is that some
+combinations of `s` and `t` would be tested many times. So what do we
+do? Cache these result! So I added a map in the class to store the
+result of all calls to `calcNum`...
+
+[source,c++]
+----
+class Solution
+{
+public:
+    std::map<std::tuple<unsigned int, unsigned int>, int> Cache;
+
+    int calcNum(const string& s, const string& t, unsigned int s_begin, unsigned int t_begin)
+    {
+        // cout << "Trying " << s_begin << ' ' << t_begin << ", "
+        //      << s.substr(s_begin) << " vs " << t.substr(t_begin) << endl;
+        if(t_begin >= t.size())
+        {
+            // cout << "t exhausted." << endl;
+            return 1;
+        }
+
+        if(s_begin >= s.size())
+        {
+            // cout << "s exhausted." << endl;
+            return 0;
+        }
+
+        unsigned int Num = 0;
+        for(unsigned int is = s_begin; is < s.size(); is++)
+        {
+            if(s[is] == t[t_begin])
+            {
+                // cout << "Found "  << s[is] << " at " << is << ' ' << t_begin << endl;
+                auto key = std::make_tuple(is+1, t_begin+1);
+                auto CacheHit = Cache.find(key);
+                int BranchNum = 0;
+                if(CacheHit == std::end(Cache))
+                {
+                    BranchNum = calcNum(s, t, is+1, t_begin+1);
+                    Cache[key] = BranchNum;
+                }
+                else
+                {
+                    BranchNum = CacheHit -> second;
+                }
+                // cout << s[is] << " at " << is << ' ' << t_begin << " gives "
+                //      << BranchNum << endl;
+                Num += BranchNum;
+            }
+        }
+        return Num;
+    }
+
+    int numDistinct(string s, string t)
+    {
+        return calcNum(s, t, 0, 0);
+    }
+};
+----
+
+This finishes very quickly (40ms), but is still quite bad (it’s at the
+right of the runtime spectrum). One easy modification we can do is to
+change the `std::map` to a vector, so that looking up is constant time
+instead of a log. We’ll need to pre-allocate “size of s times size of
+t” number of slots in the vector (or just use a 2D vector, which I
+didn’t do). So I did just that:
+
+[source,c++]
+----
+class Solution
+{
+public:
+    // std::map<std::tuple<unsigned int, unsigned int>, int> Cache;
+    std::vector<int> Cache;
+
+    int calcNum(const string& s, const string& t, unsigned int s_begin, unsigned int t_begin)
+    {
+        // cout << "Trying " << s_begin << ' ' << t_begin << ", "
+        //      << s.substr(s_begin) << " vs " << t.substr(t_begin) << endl;
+        if(t_begin >= t.size())
+        {
+            // cout << "t exhausted." << endl;
+            return 1;
+        }
+
+        if(s_begin >= s.size())
+        {
+            // cout << "s exhausted." << endl;
+            return 0;
+        }
+
+        unsigned int Num = 0;
+        for(unsigned int is = s_begin; is < s.size(); is++)
+        {
+            if(s[is] == t[t_begin])
+            {
+                // cout << "Found "  << s[is] << " at " << is << ' ' << t_begin << endl;
+                size_t key = (is+1) * (t.size()+1) + t_begin + 1;
+                int CacheHit = Cache[key];
+                int BranchNum = 0;
+                if(CacheHit == -1)
+                {
+                    BranchNum = calcNum(s, t, is+1, t_begin+1);
+                    Cache[key] = BranchNum;
+                }
+                else
+                {
+                    BranchNum = CacheHit;
+                }
+                // cout << s[is] << " at " << is << ' ' << t_begin << " gives "
+                //      << BranchNum << endl;
+                Num += BranchNum;
+            }
+        }
+        return Num;
+    }
+
+    int numDistinct(string s, string t)
+    {
+        Cache.resize((s.size()+1) * (t.size()+1), -1);
+        return calcNum(s, t, 0, 0);
+    }
+};
+----
+
+This finishes at half the time. Now it sits in the middle of the
+runtime spectrum. It is still slower than a lot of smarter solutions,
+but this is probably the limit of what this naive framework can do in
+general. Interestingly, even though we have that huge vector, this
+still beats 70% of solutions in terms of RAM usage. Hmm... food for
+thought.
